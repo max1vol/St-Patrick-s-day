@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shamrock Snake 🍀</title>
+    <style>
+      :root {
+        --bg: #081c15;
+        --panel: #1b4332;
+        --accent: #95d5b2;
+        --gold: #ffd166;
+        --danger: #ef476f;
+        --text: #f1faee;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #2d6a4f, var(--bg));
+        color: var(--text);
+      }
+
+      .game-shell {
+        width: min(92vw, 860px);
+        display: grid;
+        gap: 1rem;
+      }
+
+      .header {
+        background: color-mix(in srgb, var(--panel), black 18%);
+        border: 2px solid #40916c;
+        border-radius: 14px;
+        padding: 0.9rem 1.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+      }
+
+      .title {
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        font-size: clamp(1.2rem, 3.8vw, 2rem);
+      }
+
+      .stats {
+        display: flex;
+        gap: 0.7rem;
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+      }
+
+      .badge {
+        background: #2d6a4f;
+        border: 1px solid #74c69d;
+        border-radius: 999px;
+        padding: 0.35rem 0.75rem;
+      }
+
+      .canvas-wrap {
+        position: relative;
+      }
+
+      canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 14px;
+        border: 3px solid #40916c;
+        background:
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.05) 1px,
+            transparent 1px
+          ),
+          linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+          #0b2f21;
+        background-size: 22px 22px;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(1, 12, 8, 0.78);
+        border-radius: 14px;
+        text-align: center;
+        padding: 1.2rem;
+      }
+
+      .overlay.hidden {
+        display: none;
+      }
+
+      .overlay-card {
+        max-width: 420px;
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .overlay h2 {
+        margin: 0;
+        font-size: clamp(1.2rem, 4vw, 2rem);
+      }
+
+      .controls {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        background: linear-gradient(135deg, #74c69d, #52b788);
+        color: #082e23;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:hover {
+        filter: brightness(1.07);
+      }
+
+      .tips {
+        background: rgba(116, 198, 157, 0.16);
+        border: 1px dashed #95d5b2;
+        border-radius: 10px;
+        padding: 0.75rem;
+        line-height: 1.35;
+        font-size: 0.95rem;
+      }
+
+      .danger {
+        color: var(--danger);
+      }
+
+      @media (max-width: 640px) {
+        .header {
+          justify-content: center;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="header">
+        <div class="title">🍀 Shamrock Snake</div>
+        <div class="stats">
+          <span class="badge">Score: <strong id="score">0</strong></span>
+          <span class="badge">Best: <strong id="best">0</strong></span>
+          <span class="badge">Level: <strong id="level">1</strong></span>
+          <span class="badge">Speed: <strong id="speed">1.0x</strong></span>
+        </div>
+      </section>
+
+      <section class="canvas-wrap">
+        <canvas id="board" width="660" height="440"></canvas>
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlayTitle">Catch the gold, avoid the traps!</h2>
+            <p id="overlayText">
+              Start your St. Patrick's run. Eat golden coins and shamrocks, avoid trap clovers,
+              and survive as the speed ramps up.
+            </p>
+            <div class="controls">
+              <button id="startBtn">Start Game</button>
+              <button id="restartBtn">Restart</button>
+            </div>
+            <div class="tips">
+              <strong>Controls:</strong> Arrow keys or WASD · <strong>Pause:</strong> Space<br />
+              Golden pot = +10 points, shamrock = +4 points, red trap = instant game over.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const canvas = document.getElementById("board");
+      const ctx = canvas.getContext("2d");
+      const scoreEl = document.getElementById("score");
+      const bestEl = document.getElementById("best");
+      const levelEl = document.getElementById("level");
+      const speedEl = document.getElementById("speed");
+      const overlay = document.getElementById("overlay");
+      const overlayTitle = document.getElementById("overlayTitle");
+      const overlayText = document.getElementById("overlayText");
+      const startBtn = document.getElementById("startBtn");
+      const restartBtn = document.getElementById("restartBtn");
+
+      const cell = 22;
+      const cols = canvas.width / cell;
+      const rows = canvas.height / cell;
+      const bestStorageKey = "shamrock-snake-best";
+
+      let snake;
+      let direction;
+      let nextDirection;
+      let gold;
+      let shamrock;
+      let trap;
+      let score;
+      let level;
+      let speed;
+      let gameLoop;
+      let running = false;
+      let paused = false;
+
+      const dirMap = {
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 },
+        w: { x: 0, y: -1 },
+        s: { x: 0, y: 1 },
+        a: { x: -1, y: 0 },
+        d: { x: 1, y: 0 },
+      };
+
+      function randInt(max) {
+        return Math.floor(Math.random() * max);
+      }
+
+      function samePos(a, b) {
+        return a.x === b.x && a.y === b.y;
+      }
+
+      function pointOnSnake(point) {
+        return snake.some((segment) => samePos(segment, point));
+      }
+
+      function randomEmptyCell() {
+        let point;
+        do {
+          point = { x: randInt(cols), y: randInt(rows) };
+        } while (
+          pointOnSnake(point) ||
+          (gold && samePos(point, gold)) ||
+          (shamrock && samePos(point, shamrock)) ||
+          (trap && samePos(point, trap))
+        );
+        return point;
+      }
+
+      function spawnItems() {
+        gold = randomEmptyCell();
+        shamrock = randomEmptyCell();
+        trap = randomEmptyCell();
+      }
+
+      function updateHUD() {
+        scoreEl.textContent = score;
+        levelEl.textContent = level;
+        speedEl.textContent = `${speed.toFixed(1)}x`;
+        bestEl.textContent = localStorage.getItem(bestStorageKey) || "0";
+      }
+
+      function resetGame() {
+        snake = [
+          { x: Math.floor(cols / 2), y: Math.floor(rows / 2) },
+          { x: Math.floor(cols / 2) - 1, y: Math.floor(rows / 2) },
+          { x: Math.floor(cols / 2) - 2, y: Math.floor(rows / 2) },
+        ];
+        direction = { x: 1, y: 0 };
+        nextDirection = { ...direction };
+        score = 0;
+        level = 1;
+        speed = 1;
+        paused = false;
+        spawnItems();
+        updateHUD();
+        draw();
+      }
+
+      function adjustDifficulty() {
+        const newLevel = Math.floor(score / 45) + 1;
+        if (newLevel !== level) {
+          level = newLevel;
+        }
+        speed = Math.min(2.8, 1 + (level - 1) * 0.15);
+        updateHUD();
+      }
+
+      function startGame() {
+        if (gameLoop) {
+          clearInterval(gameLoop);
+        }
+        resetGame();
+        running = true;
+        overlay.classList.add("hidden");
+        gameLoop = setInterval(tick, 120);
+      }
+
+      function gameOver(reason) {
+        running = false;
+        clearInterval(gameLoop);
+
+        const best = Number(localStorage.getItem(bestStorageKey) || 0);
+        if (score > best) {
+          localStorage.setItem(bestStorageKey, String(score));
+        }
+
+        overlay.classList.remove("hidden");
+        overlayTitle.textContent = "Game over ☘️";
+        overlayText.innerHTML = `${reason}<br /><strong>Final score:</strong> ${score}`;
+        updateHUD();
+      }
+
+      function drawCell(x, y, color, radius = 5) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4, radius);
+        ctx.fill();
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        snake.forEach((segment, index) => {
+          const color = index === 0 ? "#f1fa8c" : "#74c69d";
+          drawCell(segment.x, segment.y, color, index === 0 ? 9 : 6);
+        });
+
+        drawCell(gold.x, gold.y, "#ffd166", 8);
+        drawCell(shamrock.x, shamrock.y, "#95d5b2", 8);
+        drawCell(trap.x, trap.y, "#ef476f", 8);
+      }
+
+      function tick() {
+        if (!running || paused) return;
+
+        if (direction.x + nextDirection.x !== 0 || direction.y + nextDirection.y !== 0) {
+          direction = nextDirection;
+        }
+
+        const head = {
+          x: snake[0].x + direction.x,
+          y: snake[0].y + direction.y,
+        };
+
+        if (head.x < 0 || head.y < 0 || head.x >= cols || head.y >= rows) {
+          gameOver("You slithered out of the parade route.");
+          return;
+        }
+
+        if (pointOnSnake(head)) {
+          gameOver("You tangled with your own tail.");
+          return;
+        }
+
+        snake.unshift(head);
+
+        if (samePos(head, trap)) {
+          draw();
+          gameOver('<span class="danger">You hit a cursed clover trap!</span>');
+          return;
+        }
+
+        if (samePos(head, gold)) {
+          score += 10;
+          gold = randomEmptyCell();
+          if (Math.random() < 0.25) {
+            trap = randomEmptyCell();
+          }
+        } else if (samePos(head, shamrock)) {
+          score += 4;
+          shamrock = randomEmptyCell();
+        } else {
+          snake.pop();
+        }
+
+        adjustDifficulty();
+        clearInterval(gameLoop);
+        gameLoop = setInterval(tick, Math.max(60, 120 / speed));
+        draw();
+      }
+
+      function togglePause() {
+        if (!running) return;
+        paused = !paused;
+        if (paused) {
+          overlay.classList.remove("hidden");
+          overlayTitle.textContent = "Paused";
+          overlayText.textContent = "Press space to hop back into the parade.";
+        } else {
+          overlay.classList.add("hidden");
+        }
+      }
+
+      document.addEventListener("keydown", (event) => {
+        const key = event.key;
+
+        if (key === " ") {
+          event.preventDefault();
+          togglePause();
+          return;
+        }
+
+        const candidate = dirMap[key] || dirMap[key.toLowerCase()];
+        if (!candidate) return;
+
+        event.preventDefault();
+        nextDirection = candidate;
+      });
+
+      startBtn.addEventListener("click", startGame);
+      restartBtn.addEventListener("click", startGame);
+
+      resetGame();
+    </script>
+  </body>
+</html>
